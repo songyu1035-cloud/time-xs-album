@@ -246,42 +246,7 @@
   }
 }
         
-
-        let count = 0;
-
-        for (const file of files) {
-          const url = typeof file === "string"
-            ? file
-            : file.url || file.signedUrl ||
-              file.signed_url || file.publicUrl;
-
-          if (typeof url !== "string" ||
-              !/^https?:\/\//i.test(url)) {
-            continue;
-          }
-
-          const img = document.createElement("img");
-          img.src = url;
-          img.alt = "TIME XS 婚礼照片";
-          img.loading = "lazy";
-          img.onerror = () => {
-            img.alt = "照片加载失败，请刷新重试";
-          };
-
-          $("gallery").appendChild(img);
-          count++;
-        }
-
-        $("albumMessage").textContent = count
-          ? "已显示 " + count + " 张照片。"
-          : "暂时没有可显示的照片地址。";
-      } catch (error) {
-        $("albumMessage").textContent =
-          "照片加载失败：" + error.message;
-      } finally {
-        $("refreshButton").disabled = false;
-      }
-    }
+       
 
     $("refreshButton").addEventListener("click", loadPhotos);
 

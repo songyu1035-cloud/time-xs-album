@@ -191,26 +191,61 @@
     });
 
     async function loadPhotos() {
-      $("albumMessage").textContent = "正在加载照片……";
-      $("gallery").replaceChildren();
-      $("refreshButton").disabled = true;
+      async function loadPhotos() {
+  $("albumMessage").textContent = "正在加载照片……";
+  $("gallery").replaceChildren();
+  $("refreshButton").disabled = true;
+
+  try {
+    const result = await api("list");
+
+    if (result.success !== true || !Array.isArray(result.files)) {
+      throw new Error(result.error || "读取照片列表失败");
+    }
+
+    if (result.files.length === 0) {
+      $("albumMessage").textContent = "相册里暂时没有照片。";
+      return;
+    }
+
+    let count = 0;
+
+    for (const file of result.files) {
+      if (!file.name) continue;
 
       try {
-        const result = await api("list");
+        const signed = await api("sign", { path: file.name });
+        const url = signed.signedUrl;
 
-        const files = result.files ||
-          result.photos || result.data;
+        if (!signed.success || !url) continue;
 
-        if (!Array.isArray(files)) {
-          throw new Error(
-            result.error ||
-            "后台照片列表接口返回格式不匹配，请检查 Edge Function。"
-          );
-        }
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = file.name;
+        img.loading = "lazy";
 
-        if (files.length === 0) {
-          $("albumMessage").textContent = "相册里暂时没有照片。";
-          return;
+        img.onerror = () => {
+          img.alt = "照片加载失败，请刷新相册";
+        };
+
+        $("gallery").appendChild(img);
+        count++;
+      } catch (error) {
+        console.error("照片签名失败：", file.name, error);
+      }
+    }
+
+    $("albumMessage").textContent = count > 0
+      ? "已加载 " + count + " 张照片。"
+      : "没有成功加载照片，请检查存储桶中的文件。";
+
+  } catch (error) {
+    $("albumMessage").textContent =
+      "照片加载失败：" + error.message;
+  } finally {
+    $("refreshButton").disabled = false;
+  }
+      }  
         }
 
         let count = 0;

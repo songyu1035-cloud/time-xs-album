@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171512">
+  <title>Time XS · 私密相册</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #171512;
+      color: #f8f0e5;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      padding: 30px 20px 20px;
+      text-align: center;
+      border-bottom: 1px solid #393129;
+    }
+    h1 {
+      margin: 0;
+      font-family: Georgia, serif;
+      font-size: 32px;
+      letter-spacing: 4px;
+    }
+    header p { color: #c8b8a2; font-size: 14px; }
+    main { max-width: 760px; margin: 30px auto; padding: 0 18px; }
+    .panel {
+      padding: 24px;
+      background: #211e1a;
+      border: 1px solid #493c2f;
+      border-radius: 16px;
+    }
+    h2 { margin-top: 0; font-size: 21px; }
+    input, button {
+      width: 100%;
+      min-height: 48px;
+      margin-top: 12px;
+      border-radius: 9px;
+      font-size: 16px;
+    }
+    input {
+      padding: 12px;
+      color: white;
+      background: #171512;
+      border: 1px solid #655342;
+    }
+    button {
+      padding: 12px;
+      border: 0;
+      background: #d7b78a;
+      color: #21180e;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .6; }
+    .secondary {
+      background: transparent;
+      color: #e4d2b9;
+      border: 1px solid #655342;
+    }
+    #message { line-height: 1.6; color: #e4cda9; }
+    #gallery {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+    #gallery img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 10px;
+      border: 1px solid #493c2f;
+    }
+    .hidden { display: none !important; }
+    footer {
+      padding: 25px 15px;
+      text-align: center;
+      color: #9f917f;
+      font-size: 12px;
+    }
+    @media (max-width: 420px) {
+      #gallery { grid-template-columns: 1fr; }
+      .panel { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>TIME XS</h1>
+    <p>珍藏每一个值得记住的瞬间</p>
+  </header>
+
+  <main>
+    <section id="loginPanel" class="panel">
+      <h2>进入我们的私密相册</h2>
+      <p>输入相册密码，开启珍藏回忆。</p>
+      <form id="loginForm">
+        <input
+          id="password"
+          type="password"
+          placeholder="请输入相册密码"
+          autocomplete="current-password"
+          required
+        >
+        <button id="loginButton" type="submit">登录相册</button>
+      </form>
+      <p id="message" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="albumPanel" class="hidden">
+      <div class="panel">
+        <h2>我们的珍藏时光</h2>
+        <p id="albumMessage">正在加载照片……</p>
+        <button id="refreshButton" class="secondary" type="button">
+          刷新照片
+        </button>
+        <button id="logoutButton" class="secondary" type="button">
+          退出登录
+        </button>
+      </div>
+      <div id="gallery"></div>
+    </section>
+  </main>
+
+  <footer>TIME XS · 私密珍藏 · 永恒回忆</footer>
+
+  <script>
+    // 已部署的 Supabase Edge Function 地址
+    const API_URL =
+      "https://qtbuxfnigveinknogplb.supabase.co/functions/v1/time-xs-access";
+
+    let sessionToken = "";
+    let photoUrls = [];
+
+    const $ = (id) => document.getElementById(id);
+
+    async function api(action, data = {}) {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(sessionToken
+            ? { "Authorization": "Bearer " + sessionToken }
+            : {})
+        },
+        body: JSON.stringify({ action, ...data })
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result.error || result.message ||
+          "请求失败（HTTP " + response.status + "）");
+      }
+
+      return result;
+    }
+
+    $("loginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const password = $("password").value;
+      $("loginButton").disabled = true;
+      $("message").textContent = "正在验证密码……";
+
+      try {
+        const result = await api("login", { password });
+
+        if (result.success !== true) {
+          throw new Error(result.error || "登录未成功");
+        }
+
+        // 兼容常见的会话令牌字段名称
+        sessionToken = result.token || result.sessionToken ||
+          result.session_token || "";
+
+        if (!sessionToken) {
+          throw new Error(
+            "登录接口没有返回会话令牌，请检查函数返回格式。"
+          );
+        }
+
+        $("password").value = "";
+        $("loginPanel").classList.add("hidden");
+        $("albumPanel").classList.remove("hidden");
+
+        await loadPhotos();
+      } catch (error) {
+        $("message").textContent =
+          "登录失败：" + error.message;
+      } finally {
+        $("loginButton").disabled = false;
+      }
+    });
+
+    async function loadPhotos() {
+      $("albumMessage").textContent

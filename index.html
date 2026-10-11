@@ -1,10 +1,9 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+<!DOCTYPE html><html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#171512">
-  <title>Time XS · 私密相册</title>
+  <title>TIME XS · 私密相册</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -14,18 +13,21 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
     header {
-      padding: 30px 20px 20px;
+      padding: 32px 18px 22px;
       text-align: center;
       border-bottom: 1px solid #393129;
     }
     h1 {
       margin: 0;
-      font-family: Georgia, serif;
-      font-size: 32px;
-      letter-spacing: 4px;
+      font: 32px Georgia, serif;
+      letter-spacing: 5px;
     }
     header p { color: #c8b8a2; font-size: 14px; }
-    main { max-width: 760px; margin: 30px auto; padding: 0 18px; }
+    main {
+      max-width: 760px;
+      margin: 30px auto;
+      padding: 0 18px;
+    }
     .panel {
       padding: 24px;
       background: #211e1a;
@@ -60,17 +62,21 @@
       color: #e4d2b9;
       border: 1px solid #655342;
     }
-    #message { line-height: 1.6; color: #e4cda9; }
+    #message, #albumMessage {
+      line-height: 1.7;
+      color: #e4cda9;
+      overflow-wrap: anywhere;
+    }
     #gallery {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 12px;
-      margin-top: 20px;
+      margin-top: 18px;
     }
     #gallery img {
-      display: block;
       width: 100%;
       height: auto;
+      display: block;
       border-radius: 10px;
       border: 1px solid #493c2f;
     }
@@ -91,49 +97,38 @@
   <header>
     <h1>TIME XS</h1>
     <p>珍藏每一个值得记住的瞬间</p>
-  </header>
-
-  <main>
+  </header>  <main>
     <section id="loginPanel" class="panel">
       <h2>进入我们的私密相册</h2>
       <p>输入相册密码，开启珍藏回忆。</p>
       <form id="loginForm">
-        <input
-          id="password"
-          type="password"
+        <input id="password" type="password"
           placeholder="请输入相册密码"
-          autocomplete="current-password"
-          required
-        >
+          autocomplete="current-password" required>
         <button id="loginButton" type="submit">登录相册</button>
       </form>
       <p id="message" role="status" aria-live="polite"></p>
-    </section>
+    </section><section id="albumPanel" class="hidden">
+  <div class="panel">
+    <h2>我们的珍藏时光</h2>
+    <p id="albumMessage">等待登录……</p>
+    <button id="refreshButton" class="secondary" type="button">
+      刷新照片
+    </button>
+    <button id="logoutButton" class="secondary" type="button">
+      退出登录
+    </button>
+  </div>
+  <div id="gallery"></div>
+</section>
 
-    <section id="albumPanel" class="hidden">
-      <div class="panel">
-        <h2>我们的珍藏时光</h2>
-        <p id="albumMessage">正在加载照片……</p>
-        <button id="refreshButton" class="secondary" type="button">
-          刷新照片
-        </button>
-        <button id="logoutButton" class="secondary" type="button">
-          退出登录
-        </button>
-      </div>
-      <div id="gallery"></div>
-    </section>
-  </main>
+  </main>  <footer>TIME XS · 私密珍藏 · 永恒回忆</footer>  <script>
+    "use strict";
 
-  <footer>TIME XS · 私密珍藏 · 永恒回忆</footer>
-
-  <script>
-    // 已部署的 Supabase Edge Function 地址
     const API_URL =
       "https://qtbuxfnigveinknogplb.supabase.co/functions/v1/time-xs-access";
 
     let sessionToken = "";
-    let photoUrls = [];
 
     const $ = (id) => document.getElementById(id);
 
@@ -152,8 +147,10 @@
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(result.error || result.message ||
-          "请求失败（HTTP " + response.status + "）");
+        throw new Error(
+          result.error || result.message ||
+          "服务器请求失败（HTTP " + response.status + "）"
+        );
       }
 
       return result;
@@ -170,17 +167,14 @@
         const result = await api("login", { password });
 
         if (result.success !== true) {
-          throw new Error(result.error || "登录未成功");
+          throw new Error(result.error || "密码验证未成功");
         }
 
-        // 兼容常见的会话令牌字段名称
-        sessionToken = result.token || result.sessionToken ||
-          result.session_token || "";
+        sessionToken = result.token ||
+          result.sessionToken || result.session_token || "";
 
         if (!sessionToken) {
-          throw new Error(
-            "登录接口没有返回会话令牌，请检查函数返回格式。"
-          );
+          throw new Error("登录成功，但服务器没有返回会话令牌。");
         }
 
         $("password").value = "";
@@ -197,4 +191,73 @@
     });
 
     async function loadPhotos() {
-      $("albumMessage").textContent
+      $("albumMessage").textContent = "正在加载照片……";
+      $("gallery").replaceChildren();
+      $("refreshButton").disabled = true;
+
+      try {
+        const result = await api("list");
+
+        const files = result.files ||
+          result.photos || result.data;
+
+        if (!Array.isArray(files)) {
+          throw new Error(
+            result.error ||
+            "后台照片列表接口返回格式不匹配，请检查 Edge Function。"
+          );
+        }
+
+        if (files.length === 0) {
+          $("albumMessage").textContent = "相册里暂时没有照片。";
+          return;
+        }
+
+        let count = 0;
+
+        for (const file of files) {
+          const url = typeof file === "string"
+            ? file
+            : file.url || file.signedUrl ||
+              file.signed_url || file.publicUrl;
+
+          if (typeof url !== "string" ||
+              !/^https?:\/\//i.test(url)) {
+            continue;
+          }
+
+          const img = document.createElement("img");
+          img.src = url;
+          img.alt = "TIME XS 婚礼照片";
+          img.loading = "lazy";
+          img.onerror = () => {
+            img.alt = "照片加载失败，请刷新重试";
+          };
+
+          $("gallery").appendChild(img);
+          count++;
+        }
+
+        $("albumMessage").textContent = count
+          ? "已显示 " + count + " 张照片。"
+          : "暂时没有可显示的照片地址。";
+      } catch (error) {
+        $("albumMessage").textContent =
+          "照片加载失败：" + error.message;
+      } finally {
+        $("refreshButton").disabled = false;
+      }
+    }
+
+    $("refreshButton").addEventListener("click", loadPhotos);
+
+    $("logoutButton").addEventListener("click", () => {
+      sessionToken = "";
+      $("gallery").replaceChildren();
+      $("albumPanel").classList.add("hidden");
+      $("loginPanel").classList.remove("hidden");
+      $("message").textContent = "已退出登录。";
+      $("password").value = "";
+    });
+  </script></body>
+</html>
